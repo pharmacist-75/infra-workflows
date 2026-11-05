@@ -1,0 +1,159 @@
+name: rw-compute-version
+
+on:
+  workflow_call:
+    inputs:
+      changelog_path:
+        description: "Path to changelog"
+        required: false
+        type: string
+        default: 'CHANGELOG'
+    outputs:
+      version:
+        description: "Version extracted from changelog"
+        value: ${{ jobs.compute-version.outputs.version }}
+      ref_slug:
+        description: "Ref name slug"
+        value: ${{ jobs.compute-version.outputs.ref_slug }}
+      short_sha:
+        description: "Short commit SHA (7 chars)"
+        value: ${{ jobs.compute-version.outputs.short_sha }}
+      image_tag:
+        description: "Computed v${version}-${ref_slug}-${short_sha}"
+        value: ${{ jobs.compute-version.outputs.image_tag }}
+      nuget_version:
+        description: "Computed NuGet version (version only, no prerelease or ref/sha)"
+        value: ${{ jobs.compute-version.outputs.nuget_version }}
+      octopus_version:
+        description: "Computed Octopus version (version without leading v, with ref/sha)"
+        value: ${{ jobs.compute-version.outputs.octopus_version }}
+
+jobs:
+  compute-version:
+    name: Version - Compute (version/ref/sha/image tag)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      ref_slug: ${{ steps.meta.outputs.ref_slug }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      nuget_version: ${{ steps.meta.outputs.nuget_version }}
+      octopus_version: ${{ steps.meta.outputs.octopus_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Compute metadata (VERSION, ref slug, IMAGE_TAG)
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C.UTF-8
+
+          # ----- Inputs
+          CHANGELOG="${{ inputs.changelog_path }}"
+
+          # ----- Validate changelog presence
+          if [ ! -s "$CHANGELOG" ]; then
+            echo "::error title=Missing changelog::File '$CHANGELOG' not found or empty."
+            echo "### ❌ Missing changelog file" >> "$GITHUB_STEP_SUMMARY"
+            echo "File '$CHANGELOG' not found or empty. Add a line like: \`1.2.3 - YYYY.MM.DD\`." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # ----- Build SemVer regex
+          # Allow -prerelease / +build metadata
+          SEMVER='[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?'
+
+          # ----- Enforce: Unreleased must be empty
+          # Extract content between 'Unreleased' and the next version line
+          UNRELEASED_CONTENT="$(
+            awk -v semver="$SEMVER" '
+              BEGIN { in_unrel=0 }
+              /^[[:space:]]*[Uu]nreleased[[:space:]]*$/ { in_unrel=1; next }
+              $0 ~ "^[[:space:]]*" semver "[[:space:]]*" { if (in_unrel) exit }
+              { if (in_unrel) print }
+            ' "$CHANGELOG" | tr -d '\r'
+          )"
+
+          # If there is any non-whitespace content, fail
+          if printf '%s' "$UNRELEASED_CONTENT" | grep -q '[^[:space:]]'; then
+            echo "::error title=Unreleased entries present::Move entries from 'Unreleased' into a new version header before merging."
+            {
+              echo "### ❌ Unreleased entries detected"
+              echo
+              echo "Please add a new version before merging, e.g.:"
+              echo
+              echo '\`\`\`'
+              echo "1.1.1 - $(date +%Y.%m.%d)"
+              echo '\`\`\`'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # ----- Extract first SemVer line (newest release)
+          LINE="$(grep -m1 -E "^[[:space:]]*${SEMVER}" "$CHANGELOG" || true)"
+          if [ -z "$LINE" ]; then
+            echo "::error title=No release version found::Add a SemVer line like '1.2.3 - YYYY.MM.DD' below 'Unreleased'."
+            echo "### ❌ No release version found" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # Keep only the version (strip date / text)
+          VERSION="$(printf '%s' "$LINE" | sed -E "s/^[[:space:]]*(${SEMVER}).*/\1/")"
+          if [ -z "$VERSION" ]; then
+            echo "::error title=Failed to parse version::Could not extract SemVer from '$CHANGELOG'."
+            echo "### ❌ Failed to parse version" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # Input from GitHub Context (will be interpolated before execution)
+          EVENT_NAME="${{ github.event_name }}"
+          HEAD_REF="${{ github.head_ref }}"
+          REF_NAME="${{ github.ref_name }}"
+          SHA_FULL="${{ github.sha }}"
+
+          # Branch/Tag-Name dependent on the event
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            REF="$HEAD_REF"
+          else
+            REF="$REF_NAME"
+          fi
+
+          # Create a slug from the ref name (like GitLab's CI_COMMIT_REF_SLUG)
+          # 1) lowercase
+          ref_lc="$(printf '%s' "$REF" | tr '[:upper:]' '[:lower:]')"
+          # 2) non-alnum -> '-'
+          ref_slug="$(printf '%s' "$ref_lc" | sed -E 's/[^a-z0-9]+/-/g')"
+          # 3) trim leading/trailing '-'
+          ref_slug="$(printf '%s' "$ref_slug" | sed -E 's/^-+//; s/-+$//')"
+
+          # Short SHA (7)
+          short_sha="${SHA_FULL:0:7}"
+
+          # Image tag (version-refslug-sha)
+          image_tag="v${VERSION}-${ref_slug}-${short_sha}"
+
+          # NuGet Version (version)
+          nuget_version="${VERSION}"
+
+          # Octopus Version (version-refslug-sha)
+          octopus_version="${VERSION}-${ref_slug}-${short_sha}"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref_slug=$ref_slug" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          echo "nuget_version=$nuget_version" >> "$GITHUB_OUTPUT"
+          echo "octopus_version=$octopus_version" >> "$GITHUB_OUTPUT"
+          {
+            echo '### ✅ Version detected'
+            echo
+            echo "- **Version:** \`$VERSION\`"
+            echo "- **Ref Slug:** \`$ref_slug\`"
+            echo "- **Short SHA:** \`$short_sha\`"
+            echo "- **Image Tag:** \`$image_tag\`"
+            echo "- **NuGet Version:** \`$nuget_version\`"
+            echo "- **Octopus Version:** \`$octopus_version\`"
+            echo "- **Source:** \`$CHANGELOG\`"
+          } >> "$GITHUB_STEP_SUMMARY"
