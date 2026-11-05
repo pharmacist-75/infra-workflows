@@ -1,0 +1,52 @@
+name: Create Tag
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    outputs:
+      created:
+        description: "Indicates if the tag was created (true) or already existed (false)"
+        value: ${{ jobs.tag.outputs.created }}
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    outputs:
+      created: ${{ steps.check.outputs.created }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags
+
+      - name: Check if tag exists
+        id: check
+        run: |
+          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag already exists → skip"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure Git
+        if: steps.check.outputs.created == 'true'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Create annotated tag
+        if: steps.check.outputs.created == 'true'
+        run: |
+          git tag -a v${{ inputs.version }} -m "Release v${{ inputs.version }}"
+          git push origin v${{ inputs.version }}
