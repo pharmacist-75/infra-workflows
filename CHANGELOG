@@ -1,8 +1,12 @@
 ﻿Unreleased
 
+1.0.1 - 2026-11-05
+
+PR2 Use versioned reusable workflows
+
 1.0.0 - 2026-11-05
 
-Initialize repository structure and documentation
+PR1 Add initial reusable workflows
 
 0.0.1 - 2026-11-05
 

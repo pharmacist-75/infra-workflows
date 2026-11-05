@@ -5,17 +5,17 @@ on:
 
 jobs:
   version:
-    uses: pharmacist-75/infra-workflows/.github/workflows/rw-compute-version.yml@main
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-compute-version.yml@v1
 
   tag:
     needs: version
-    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-tag.yml@main
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-tag.yml@v1
     with:
       version: ${{ needs.version.outputs.version }}
 
   release:
     needs: [version, tag]
     if: ${{ needs.tag.outputs.created == 'true' }}
-    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-github-release.yml@main
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-github-release.yml@v1
     with:
       version: ${{ needs.version.outputs.version }}
