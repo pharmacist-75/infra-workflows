@@ -6,6 +6,10 @@ on:
       version:
         required: true
         type: string
+      update-major-tag:
+        required: false
+        type: boolean
+        default: false
     outputs:
       created:
         description: "Indicates if the tag was created (true) or already existed (false)"
@@ -50,3 +54,13 @@ jobs:
         run: |
           git tag -a v${{ inputs.version }} -m "Release v${{ inputs.version }}"
           git push origin v${{ inputs.version }}
+
+      - name: Update floating major tag
+        if: ${{ inputs.update-major-tag && steps.check.outputs.created == 'true' }}
+        shell: bash
+        run: |
+          VERSION="v${{ inputs.version }}"
+          MAJOR="${VERSION%%.*}"
+
+          git tag -f "$MAJOR" "$VERSION"
+          git push origin "refs/tags/$MAJOR" --force

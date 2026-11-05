@@ -1,5 +1,9 @@
 ﻿Unreleased
 
+1.1.0 - 2026-11-05
+
+PR3 Automatically update floating major version tags
+
 1.0.1 - 2026-11-05
 
 PR2 Use versioned reusable workflows

@@ -2,6 +2,12 @@ name: Release Tag Orchestrator
 
 on:
   workflow_call:
+    inputs:
+      update-major-tag:
+        description: "Whether to update the floating major version tag"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   version:
@@ -12,6 +18,7 @@ jobs:
     uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-tag.yml@v1
     with:
       version: ${{ needs.version.outputs.version }}
+      update-major-tag: ${{ inputs.update-major-tag }}
 
   release:
     needs: [version, tag]
