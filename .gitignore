@@ -1,0 +1,27 @@
+﻿# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+secrets.yaml
+
+# Runtime data
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
+*.log.*
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vs/
