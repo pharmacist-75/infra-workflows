@@ -1,0 +1,21 @@
+name: Release Tag Orchestrator
+
+on:
+  workflow_call:
+
+jobs:
+  version:
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-compute-version.yml@main
+
+  tag:
+    needs: version
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-tag.yml@main
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  release:
+    needs: [version, tag]
+    if: ${{ needs.tag.outputs.created == 'true' }}
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-github-release.yml@main
+    with:
+      version: ${{ needs.version.outputs.version }}
