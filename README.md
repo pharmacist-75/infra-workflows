@@ -1,29 +1,124 @@
 # Reusable GitHub Actions Workflows
 
-This repository provides a central place for reusable GitHub Actions workflows.
+This repository contains reusable GitHub Actions workflows shared across repositories. Centralizing common CI/CD tasks reduces duplication and keeps automation consistent.
 
-The goal is to share common CI/CD automation across repositories, reduce duplication, and keep workflow behavior consistent and maintainable.
+## Available workflows
 
-## Repository structure
+Workflows are stored in `.github/workflows/` and invoked using `workflow_call`.
 
-Reusable workflows will be stored in `.github/workflows/` and can be called from other repositories using GitHub Actions' `workflow_call` trigger.
+### `rw-compute-version.yml`
 
-## Usage
+Reads the latest SemVer version from a changelog (default: `CHANGELOG`), checks that the `Unreleased` section is empty, and computes version metadata from the GitHub ref and commit SHA.
 
-Once workflows are available, consuming repositories can reference them using the following syntax:
+**Input**
+
+| Name | Required | Default | Description |
+| --- | --- | --- | --- |
+| `changelog_path` | No | `CHANGELOG` | Path to the changelog file. |
+
+**Outputs**
+
+| Name | Description |
+| --- | --- |
+| `version` | Latest version from the changelog. |
+| `ref_slug` | Lowercase, hyphenated branch or tag name. |
+| `short_sha` | First seven characters of the commit SHA. |
+| `image_tag` | `v<version>-<ref_slug>-<short_sha>` |
+| `nuget_version` | Version without ref/SHA suffix. |
+| `octopus_version` | `<version>-<ref_slug>-<short_sha>` |
+
+Example:
 
 ```yaml
 jobs:
-  example:
-    uses: <owner>/<repository>/.github/workflows/<workflow>.yml@<ref>
+  version:
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-compute-version.yml@v1.0.0
+    with:
+      changelog_path: CHANGELOG
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Version: ${{ needs.version.outputs.version }}"
 ```
 
-Replace the placeholders with the repository owner (`pharmacist-75`), repository name (`infra-workflows`), workflow filename, and a version tag or commit SHA.
+The changelog must contain a version line such as `1.0.0 - 2026-11-05`. The workflow fails if the file is missing or empty, no version is found, or the `Unreleased` section contains entries.
+
+### `rw-create-github-release.yml`
+
+Creates a GitHub release for the supplied version, using tag `v<version>` and automatically generated release notes.
+
+**Input**
+
+| Name | Required | Description |
+| --- | --- | --- |
+| `version` | Yes | Release version without the leading `v` (e.g. `1.0.0`). |
+
+Example:
+
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-github-release.yml@v1.0.0
+    with:
+      version: 1.0.0
+```
+
+The calling workflow must grant `contents: write` to allow release creation. The release workflow uses the GitHub CLI (`gh`) and the automatically provided `GITHUB_TOKEN`.
+
+### `rw-create-tag.yml`
+
+Creates and pushes an annotated Git tag named `v<version>` if it does not already exist. Existing tags are left unchanged.
+
+**Input**
+
+| Name | Required | Description |
+| --- | --- | --- |
+| `version` | Yes | Version without the leading `v` (e.g. `1.0.0`). |
+
+**Output**
+
+| Name | Description |
+| --- | --- |
+| `created` | `true` if the tag was created; `false` if it already existed. |
+
+Example:
+
+```yaml
+jobs:
+  tag:
+    permissions:
+      contents: write
+    uses: pharmacist-75/infra-workflows/.github/workflows/rw-create-tag.yml@v1.0.0
+    with:
+      version: 1.0.0
+```
+
+### `rcw-release-tag.yml`
+
+Orchestrates a release by computing the version, creating the Git tag, and creating a GitHub release **only when a new tag was created**. It calls the other three reusable workflows.
+
+**Inputs:** None.
+
+Example:
+
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: pharmacist-75/infra-workflows/.github/workflows/rcw-release-tag.yml@v1.0.0
+```
+
+**Note:** The orchestrator currently references the `niq-enterprise/dpidas-infra-workflows` repository at `@v4` internally. Update those references if you publish this workflow in a different repository or under a different release tag. The caller must grant `contents: write` for tag and release creation.
+
+## Usage
+
+Reference a published release tag (for example `@v1.0.0`) or pin a commit SHA for reproducibility.
 
 ## Development
 
-Workflows will be added incrementally. Each workflow will include documentation describing its purpose, required inputs, secrets, permissions, and usage.
-
-## Status
-
-This is the initial repository setup. No reusable workflows are included yet.
+Add new workflows under `.github/workflows/` and document their purpose, inputs, outputs, required permissions, and usage here. Changes should be reviewed through pull requests.
