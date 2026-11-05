@@ -10,5 +10,5 @@ permissions:
 
 jobs:
   release:
-    uses: pharmacist-75/infra-workflows/.github/workflows/rcw-release-tag.yml@main
+    uses: pharmacist-75/infra-workflows/.github/workflows/rcw-release-tag.yml@v1
     secrets: inherit
