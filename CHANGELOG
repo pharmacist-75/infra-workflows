@@ -1,5 +1,9 @@
 ﻿Unreleased
 
+1.1.1 - 2026-11-20
+
+PR4 Validate release tag history and standardize Bash execution
+
 1.1.0 - 2026-11-05
 
 PR3 Automatically update floating major version tags
